@@ -141,6 +141,7 @@ GDCALLINGCONV void discovery_destructor(godot_object *p_instance, void *p_method
 
 bool discovery_init(user_data_struct* user_data, int port, int broadcast) {
   // clear existing data
+  user_data->message[0] = '\0';
   if (user_data->dsocket >= 0) {
     close(user_data->dsocket);
     memset(user_data->message, 0, sizeof(user_data->message));
@@ -153,7 +154,7 @@ bool discovery_init(user_data_struct* user_data, int port, int broadcast) {
   }
 
   // set broadcast
-  if (setsockopt(user_data->dsocket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) == -1) {
+  if (broadcast && setsockopt(user_data->dsocket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) == -1) {
     user_data->dsocket = -1;
     return false;
   }
@@ -190,7 +191,7 @@ godot_variant discovery_server(godot_object *p_instance, void *p_method_data, vo
   }
 
   // failed to pass correct args
-  if (p_num_args != 1 ||
+  if (p_num_args != 2 ||
     api->godot_variant_get_type(p_args[0]) != GODOT_VARIANT_TYPE_INT ||
     api->godot_variant_get_type(p_args[1]) != GODOT_VARIANT_TYPE_STRING
   ) {
@@ -201,7 +202,7 @@ godot_variant discovery_server(godot_object *p_instance, void *p_method_data, vo
   int port = api->godot_variant_as_int(p_args[0]);
 
   // setup socket
-  if (!discovery_init(user_data, 0, 0)) {
+  if (!discovery_init(user_data, port, 0)) {
     api->godot_variant_new_nil(&ret);
     return ret;
   }
@@ -211,6 +212,12 @@ godot_variant discovery_server(godot_object *p_instance, void *p_method_data, vo
   godot_char_string message_ascii = api->godot_string_ascii(&message_string);
   strncpy(user_data->message, api->godot_char_string_get_data(&message_ascii), MAX_MESSAGE_SIZE);
 
+  // set return value
+  api->godot_variant_new_bool(&ret, true);
+
+  // cleanup
+  api->godot_char_string_destroy(&message_ascii);
+  api->godot_string_destroy(&message_string);
   return ret;
 }
 
@@ -266,10 +273,10 @@ godot_variant discovery_broadcast(godot_object *p_instance, void *p_method_data,
   api->godot_variant_new_bool(&ret, result < 0 ? false : true);
 
   // cleanup
-  api->godot_string_destroy(&host_string);
   api->godot_char_string_destroy(&host_ascii);
-  api->godot_string_destroy(&message_string);
+  api->godot_string_destroy(&host_string);
   api->godot_char_string_destroy(&message_ascii);
+  api->godot_string_destroy(&message_string);
   return ret;
 }
 
@@ -301,6 +308,17 @@ godot_variant discovery_poll(godot_object *p_instance, void *p_method_data, void
   if (bytes < 0) {
     api->godot_variant_new_nil(&ret);
     return ret;
+  }
+
+  // we have a message to send back
+  if (user_data->message[0] != '\0') {
+    sendto(
+      user_data->dsocket,
+      user_data->message,
+      strnlen(user_data->message, MAX_MESSAGE_SIZE),
+      0,
+      (struct sockaddr*)&src_addr,
+      sizeof(struct sockaddr_in));
   }
 
   godot_string message_string;
