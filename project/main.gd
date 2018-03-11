@@ -1,6 +1,6 @@
 extends Control
 
-onready var discovery = preload('res://bin/discovery.gdns').new()
+onready var discovery = preload('res://network/discovery.gdns').new()
 
 const HTTPMU_HOST_ADDRESS = '239.255.255.250'
 const HTTPMU_HOST_PORT = 1900

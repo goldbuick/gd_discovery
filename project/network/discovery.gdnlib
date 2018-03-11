@@ -7,9 +7,9 @@ symbol_prefix="godot_"
 
 [entry]
 
-X11.64="res://bin/libdiscovery.so"
-Windows.64="res://bin/discovery.dll"
-OSX.64="res://bin/libdiscovery.dylib"
+X11.64="res://network/libdiscovery.so"
+Windows.64="res://network/discovery.dll"
+OSX.64="res://network/libdiscovery.dylib"
 
 [dependencies]
 
