@@ -27,6 +27,8 @@ HOST: 239.255.255.250:1900
 const HTTP_OK = '200 OK'
 const DEFAULT_HTTP_PORT  = 80
 
+const HTTP_URL_PREFIX = 'http://'
+
 
 func add_port_mapping(port):
 	if state == STATE.READY:
