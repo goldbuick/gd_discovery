@@ -30,6 +30,7 @@ bool discovery_init(user_data_struct* user_data, int port, int broadcast);
 godot_variant discovery_server(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
 godot_variant discovery_broadcast(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
 godot_variant discovery_poll(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
+godot_variant discovery_ifaddrs(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
 
 void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
   api = p_options->api_struct;
@@ -122,6 +123,13 @@ void GDN_EXPORT godot_nativescript_init(void *p_handle) {
   nativescript_api->godot_nativescript_register_method(p_handle, LIB_NAME, "poll", attributes, poll);
   if (nativescript_1_1_api) {
     nativescript_1_1_api->godot_nativescript_set_method_argument_information(p_handle, LIB_NAME, "poll", 0, NULL);    
+  }
+
+  godot_instance_method ifaddrs = { NULL, NULL, NULL };
+  ifaddrs.method = &discovery_ifaddrs;
+  nativescript_api->godot_nativescript_register_method(p_handle, LIB_NAME, "ifaddrs", attributes, ifaddrs);
+  if (nativescript_1_1_api) {
+    nativescript_1_1_api->godot_nativescript_set_method_argument_information(p_handle, LIB_NAME, "ifaddrs", 0, NULL);    
   }
 }
 
@@ -349,3 +357,11 @@ godot_variant discovery_poll(godot_object *p_instance, void *p_method_data, void
   api->godot_array_destroy(&ping);
   return ret;
 }
+
+godot_variant discovery_ifaddrs(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args) {
+  godot_variant ret;
+  user_data_struct *user_data = (user_data_struct *)p_user_data;
+
+  return ret;
+}
+
