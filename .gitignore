@@ -5,3 +5,7 @@ build/
 godot_headers/
 
 *.dylib
+
+.import/
+.fscache
+*~
