@@ -13,11 +13,10 @@ HOST: 239.255.255.250:1900
 """
 
 func _ready():
-	var result = discovery.ping(HTTPMU_HOST_ADDRESS, HTTPMU_HOST_PORT, SEARCH_REQUEST_STRING)
-	print(['ping', result])
+	discovery.broadcast(HTTPMU_HOST_ADDRESS, HTTPMU_HOST_PORT, SEARCH_REQUEST_STRING)
 
 func _process(delta):
-	var pongs = discovery.pongs()
+	var pongs = discovery.poll()
 	if pongs:
 		print(pongs)
 
