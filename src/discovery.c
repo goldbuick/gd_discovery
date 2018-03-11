@@ -6,6 +6,7 @@
 #include <netdb.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -40,13 +41,13 @@ void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
     switch (api->extensions[i]->type) {
       case GDNATIVE_EXT_NATIVESCRIPT: {
         nativescript_api = (godot_gdnative_ext_nativescript_api_struct *)api->extensions[i];
-        
+
         if (!nativescript_api->next)
           break;
 
         if (nativescript_api->next->version.major == 1 && nativescript_api->next->version.minor == 1) {
           nativescript_1_1_api = (const godot_gdnative_ext_nativescript_1_1_api_struct *) nativescript_api->next;
-        }        
+        }
       }; break;
       default: break;
     };
@@ -88,7 +89,7 @@ void GDN_EXPORT godot_nativescript_init(void *p_handle) {
     server_args[1].hint = GODOT_PROPERTY_HINT_NONE;
     server_args[1].type = GODOT_VARIANT_TYPE_STRING;
 
-    nativescript_1_1_api->godot_nativescript_set_method_argument_information(p_handle, LIB_NAME, "server", 2, server_args);    
+    nativescript_1_1_api->godot_nativescript_set_method_argument_information(p_handle, LIB_NAME, "server", 2, server_args);
   }
 
   godot_instance_method broadcast = { NULL, NULL, NULL };
@@ -122,14 +123,14 @@ void GDN_EXPORT godot_nativescript_init(void *p_handle) {
   poll.method = &discovery_poll;
   nativescript_api->godot_nativescript_register_method(p_handle, LIB_NAME, "poll", attributes, poll);
   if (nativescript_1_1_api) {
-    nativescript_1_1_api->godot_nativescript_set_method_argument_information(p_handle, LIB_NAME, "poll", 0, NULL);    
+    nativescript_1_1_api->godot_nativescript_set_method_argument_information(p_handle, LIB_NAME, "poll", 0, NULL);
   }
 
   godot_instance_method ifaddrs = { NULL, NULL, NULL };
   ifaddrs.method = &discovery_ifaddrs;
   nativescript_api->godot_nativescript_register_method(p_handle, LIB_NAME, "ifaddrs", attributes, ifaddrs);
   if (nativescript_1_1_api) {
-    nativescript_1_1_api->godot_nativescript_set_method_argument_information(p_handle, LIB_NAME, "ifaddrs", 0, NULL);    
+    nativescript_1_1_api->godot_nativescript_set_method_argument_information(p_handle, LIB_NAME, "ifaddrs", 0, NULL);
   }
 }
 
@@ -264,7 +265,7 @@ godot_variant discovery_broadcast(godot_object *p_instance, void *p_method_data,
   struct sockaddr_in ping_addr;
   ping_addr.sin_family = AF_INET;
   ping_addr.sin_port = htons(api->godot_variant_as_int(p_args[1]));
-  memcpy((char *)&ping_addr.sin_addr.s_addr, host->h_addr_list[0], host->h_length);  
+  memcpy((char *)&ping_addr.sin_addr.s_addr, host->h_addr_list[0], host->h_length);
 
   // convert message into ascii string
   godot_string message_string = api->godot_variant_as_string(p_args[2]);
@@ -345,7 +346,7 @@ godot_variant discovery_poll(godot_object *p_instance, void *p_method_data, void
   api->godot_array_new(&ping);
   api->godot_array_append(&ping, &message);
   api->godot_array_append(&ping, &source);
-  
+
   // set return value
   api->godot_variant_new_array(&ret, &ping);
 
@@ -362,6 +363,39 @@ godot_variant discovery_ifaddrs(godot_object *p_instance, void *p_method_data, v
   godot_variant ret;
   user_data_struct *user_data = (user_data_struct *)p_user_data;
 
+  struct sockaddr_in *sa;
+  struct ifaddrs *ifap, *ifa;
+
+  godot_array addrs;
+  api->godot_array_new(&addrs);
+
+  getifaddrs(&ifap);
+  for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+    if (ifa->ifa_addr->sa_family == AF_INET) {
+      sa = (struct sockaddr_in *)ifa->ifa_addr;
+
+      // get address
+      godot_string addr_string;
+      api->godot_string_new(&addr_string);
+      api->godot_string_parse_utf8(&addr_string, inet_ntoa(sa->sin_addr));
+
+      // add to array
+      godot_variant addr;
+      api->godot_variant_new_string(&addr, &addr_string);
+      api->godot_array_append(&addrs, &addr);
+
+      // cleanup
+      api->godot_string_destroy(&addr_string);
+      api->godot_variant_destroy(&addr);
+    }
+  }
+  freeifaddrs(ifap);
+
+  // set return value
+  api->godot_variant_new_array(&ret, &addrs);
+
+  // cleanup
+  api->godot_array_destroy(&addrs);
   return ret;
 }
 
