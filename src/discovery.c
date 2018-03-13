@@ -27,7 +27,7 @@ const godot_gdnative_ext_nativescript_1_1_api_struct *nativescript_1_1_api = NUL
 
 GDCALLINGCONV void *discovery_constructor(godot_object *p_instance, void *p_method_data);
 GDCALLINGCONV void discovery_destructor(godot_object *p_instance, void *p_method_data, void *p_user_data);
-bool discovery_init(user_data_struct* user_data, int port, int broadcast);
+bool discovery_init(user_data_struct* user_data, int port, int broadcast, bool keep);
 godot_variant discovery_server(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
 godot_variant discovery_broadcast(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
 godot_variant discovery_poll(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
@@ -148,12 +148,11 @@ GDCALLINGCONV void discovery_destructor(godot_object *p_instance, void *p_method
   api->godot_free(p_user_data);
 }
 
-bool discovery_init(user_data_struct* user_data, int port, int broadcast) {
+bool discovery_init(user_data_struct* user_data, int port, int broadcast, bool keep) {
   // clear existing data
-  user_data->message[0] = '\0';
-  if (user_data->dsocket >= 0) {
+  memset(user_data->message, 0, sizeof(user_data->message));
+  if (user_data->dsocket >= 0 && keep == false) {
     close(user_data->dsocket);
-    memset(user_data->message, 0, sizeof(user_data->message));
   }
 
   // create socket
@@ -211,7 +210,7 @@ godot_variant discovery_server(godot_object *p_instance, void *p_method_data, vo
   int port = api->godot_variant_as_int(p_args[0]);
 
   // setup socket
-  if (!discovery_init(user_data, port, 0)) {
+  if (!discovery_init(user_data, port, 0, false)) {
     api->godot_variant_new_nil(&ret);
     return ret;
   }
@@ -251,7 +250,7 @@ godot_variant discovery_broadcast(godot_object *p_instance, void *p_method_data,
   }
 
   // setup socket
-  if (!discovery_init(user_data, 0, 1)) {
+  if (!discovery_init(user_data, 0, 1, true)) {
     api->godot_variant_new_nil(&ret);
     return ret;
   }

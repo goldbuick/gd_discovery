@@ -5,20 +5,26 @@ enum STATE {
 	REQUEST,
 	READING,
 	BUFFER,
+	TIMEOUT,
 	DONE,
 }
 
 var http = null
+var request_time = 0
 var read_buffer = null
 var state = STATE.READY
 
-func request(host, port, method, path, headers):
+func request(host, port, method, path, headers, delta):
 	if state > STATE.READY and state < STATE.DONE:
 		http.poll()
+		request_time += delta
+		if request_time > 5:
+			state = STATE.TIMEOUT
 
 	match state:
 		STATE.READY:
 			http = HTTPClient.new()
+			request_time = 0
 			state = STATE.CONNECT
 			var err = http.connect_to_host(host, port)
 			assert(err == OK)

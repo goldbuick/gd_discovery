@@ -7,4 +7,4 @@ const HEADERS = [
 ]
 
 func request():
-	return http.request('icanhazip.com', 80, HTTPClient.METHOD_GET, '/', HEADERS)
+	return http.request('icanhazip.com', 80, HTTPClient.METHOD_GET, '/', HEADERS, 0)

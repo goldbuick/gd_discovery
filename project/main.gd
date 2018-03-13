@@ -15,7 +15,7 @@ func _ready():
 #	client.start(SERVER_HANDSHAKE)
 	
 func _process(delta):
-	server.poll()
+	server.poll(delta)
 #	client.poll()
 	
 func _client_found_server(ip):

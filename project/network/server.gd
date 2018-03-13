@@ -12,10 +12,10 @@ func start(port, handshake):
 	server_port = port
 	return discovery.server(discovery_port, handshake)
 
-func poll():
+func poll(delta):
 	discovery.poll()
 
-	var external_port = upnp.add_port_mapping(server_port)
+	var external_port = upnp.add_port_mapping(server_port, delta)
 	if external_port:
 		emit_signal('port_forwarding', external_port)
 		
