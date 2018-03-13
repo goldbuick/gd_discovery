@@ -13,7 +13,7 @@ var read_buffer = null
 var state = STATE.READY
 
 func request(host, port, method, path, headers):
-	if state > STATE.READY && state < STATE.DONE:
+	if state > STATE.READY and state < STATE.DONE:
 		http.poll()
 
 	match state:

@@ -1,7 +1,4 @@
 
-# this will use discovery to find your router
-# and then add a port forwarding address to your computer
-
 var discovery = preload('res://network/discovery.gdns').new()
 
 enum STATE {
@@ -15,29 +12,35 @@ var state = STATE.READY
 
 const HTTPMU_HOST_ADDRESS = '239.255.255.250'
 const HTTPMU_HOST_PORT = 1900
-const SEARCH_REQUEST_STRING = """M-SEARCH * HTTP/1.1
-ST:UPnP:rootdevice
-MX: 3
-Man:"ssdp:discover"
-HOST: 239.255.255.250:1900
-
-"""
 
 const HTTP_OK = '200 OK'
 const DEFAULT_HTTP_PORT  = 80
 
 const HTTP_URL_PREFIX = 'http://'
 
+func broadcast_for_device(device):
+	var SEARCH_REQUEST_STRING = PoolStringArray([
+		'M-SEARCH * HTTP/1.1',
+		'HOST: 239.255.255.250:1900',
+		'ST: ' + device,
+		'MAN: "ssdp:discover"',
+		'MX: 1',
+		'',
+	]).join('\r\n')
+	discovery.broadcast(HTTPMU_HOST_ADDRESS, HTTPMU_HOST_PORT, SEARCH_REQUEST_STRING)
 
 func add_port_mapping(port):
 	if state == STATE.READY:
 		state = STATE.BROADCAST
-		discovery.broadcast(HTTPMU_HOST_ADDRESS, HTTPMU_HOST_PORT, SEARCH_REQUEST_STRING)
+		broadcast_for_device('urn:schemas-upnp-org:device:InternetGatewayDevice:1')
+		broadcast_for_device('urn:schemas-upnp-org:service:WANIPConnection:1')
+		broadcast_for_device('urn:schemas-upnp-org:service:WANPPPConnection:1')
+		broadcast_for_device('upnp:rootdevice')
 		
 	elif state <= STATE.DISCOVERY:
-		var pongs = discovery.poll()
-		if pongs:
-			print(pongs)
+		var response = discovery.poll()
+		if response:
+			print(response[0])
 	else:
 		match state:
 			STATE.DONE:
