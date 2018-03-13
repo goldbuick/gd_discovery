@@ -21,6 +21,13 @@ const DEFAULT_HTTP_PORT  = 80
 
 const HTTP_URL_PREFIX = 'http://'
 
+const DEVICE_TYPE_1 = 'urn:schemas-upnp-org:device:InternetGatewayDevice:1'
+const DEVICE_TYPE_2 = 'urn:schemas-upnp-org:device:WANDevice:1'
+const DEVICE_TYPE_3 = 'urn:schemas-upnp-org:device:WANConnectionDevice:1'
+
+const SERVICE_WANIP = 'urn:schemas-upnp-org:service:WANIPConnection:1'
+const SERVICE_WANPPP = 'urn:schemas-upnp-org:service:WANPPPConnection:1'
+
 func broadcast_for_device(device):
 	var SEARCH_REQUEST_STRING = PoolStringArray([
 		'M-SEARCH * HTTP/1.1',
@@ -64,8 +71,13 @@ func parse_url(url):
 func xml_read_until_end(parser, node_name):
 	var result = parser.read()
 	if result == ERR_FILE_EOF:
-		return true
+		return false
 	if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == node_name:
+		return false
+	return true
+	
+func xml_element(parser, node_name):
+	if parser.get_node_type() == XMLParser.NODE_ELEMENT and parser.get_node_name() == node_name:
 		return true
 	return false
 	
@@ -80,19 +92,21 @@ func parse_device_description(url, request):
 				'URLBase':
 					parser.read()
 					print(parser.get_node_data())
+					
 				'device':
 					while xml_read_until_end(parser, 'device'):
-						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
-							print(parser.get_node_name())
+						if xml_element(parser, 'deviceType'):
+							parser.read()
+							var deviceType = parser.get_node_data()
 
 
 func add_port_mapping(port, delta):
 	if state == STATE.READY:
 		state = STATE.GET_DESCRIPTION
 		broadcast_for_device('upnp:rootdevice')
-		broadcast_for_device('urn:schemas-upnp-org:device:WANDevice:1')
-		broadcast_for_device('urn:schemas-upnp-org:device:WANConnectionDevice:1')
-		broadcast_for_device('urn:schemas-upnp-org:device:InternetGatewayDevice:1')
+		broadcast_for_device(DEVICE_TYPE_1)
+		broadcast_for_device(DEVICE_TYPE_2)
+		broadcast_for_device(DEVICE_TYPE_3)
 		
 	elif state <= STATE.DISCOVERY:
 		var response = discovery.poll()
