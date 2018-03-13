@@ -60,6 +60,31 @@ func parse_url(url):
 		port = port,
 		path = path
 	}
+	
+func xml_read_until_end(parser, node_name):
+	var result = parser.read()
+	if result == ERR_FILE_EOF:
+		return true
+	if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == node_name:
+		return true
+	return false
+	
+func parse_device_description(url, request):
+	var base_url = 'http://' + url.host + ':' + str(url.port)
+	
+	var parser = XMLParser.new()
+	parser.open_buffer(request.to_ascii())
+	while parser.read() != ERR_FILE_EOF:
+		if parser.get_node_type() == XMLParser.NODE_ELEMENT:
+			match parser.get_node_name():
+				'URLBase':
+					parser.read()
+					print(parser.get_node_data())
+				'device':
+					while xml_read_until_end(parser, 'device'):
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
+							print(parser.get_node_name())
+
 
 func add_port_mapping(port, delta):
 	if state == STATE.READY:
@@ -84,7 +109,7 @@ func add_port_mapping(port, delta):
 						get_description_request = Http.new()
 					var request = get_description_request.request(url.host, url.port, HTTPClient.METHOD_GET, url.path, [], delta)
 					if request:
-						print(request)
+						var device = parse_device_description(url, request)
 		
 	else:
 		match state:
