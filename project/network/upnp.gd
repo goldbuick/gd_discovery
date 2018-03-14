@@ -12,10 +12,8 @@ enum STATE {
 }
 
 var state = STATE.READY
-var upnp_device = null
-var local_addrs = null
-var get_description_queue = []
-var get_description_request = null
+var description_queue = []
+var description_request = null
 var add_port_mapping_request = null
 
 const HTTPMU_HOST_ADDRESS = '239.255.255.250'
@@ -44,7 +42,7 @@ func broadcast_for_device(device):
 		'',
 	]).join('\r\n')
 	discovery.broadcast(HTTPMU_HOST_ADDRESS, HTTPMU_HOST_PORT, SEARCH_REQUEST_STRING)
-	
+
 func get_describe_url(response):
 	var begin = response.find(HTTP_OK)
 	if begin == -1:
@@ -56,7 +54,7 @@ func get_describe_url(response):
 	if end == -1:
 		return null
 	return response.substr(begin, end-begin)
-		
+
 func parse_url(url):
 	# http://192.168.86.1:5000/rootDesc.xml
 	var parts = url.split('//')
@@ -76,7 +74,7 @@ func parse_url(url):
 
 func request_device_description(url):
 	return Http.new(url.host, url.port, HTTPClient.METHOD_GET, url.path, [])
-	
+
 func parse_device_description(url, request):
 	var xml = XML.new(request)
 
@@ -94,12 +92,12 @@ func parse_device_description(url, request):
 	# failed to find internet_gateway_device
 	if !internet_gateway_device:
 		return null
-		
+
 	# get device list of internet_gateway_device
 	var device_list = xml.get_child_node(internet_gateway_device, 'deviceList', 0)
-	if !device_list: 
+	if !device_list:
 		return null
-		
+
 	var wan_device = null
 	for node in xml.get_child_nodes(device_list, 'device'):
 		var device_type = xml.get_child_node(node, 'deviceType', 0)
@@ -108,12 +106,12 @@ func parse_device_description(url, request):
 	# failed to find wan_device
 	if !wan_device:
 		return null
-		
+
 	# get device list of wan_device
 	device_list = xml.get_child_node(wan_device, 'deviceList', 0)
-	if !device_list: 
+	if !device_list:
 		return null
-		
+
 	var wan_connection_device = null
 	for node in xml.get_child_nodes(device_list, 'device'):
 		var device_type = xml.get_child_node(node, 'deviceType', 0)
@@ -122,12 +120,12 @@ func parse_device_description(url, request):
 	# failed to find wan_connection_device
 	if !wan_connection_device:
 		return null
-				
+
 	# get service list of wan_connection_device
 	var service_list = xml.get_child_node(wan_connection_device, 'serviceList', 0)
-	if !service_list: 
+	if !service_list:
 		return null
-				
+
 	var service = null
 	for node in xml.get_child_nodes(service_list, 'service'):
 		var service_type = xml.get_child_node(node, 'serviceType', 0)
@@ -136,18 +134,48 @@ func parse_device_description(url, request):
 	# failed to find service
 	if !service:
 		return null
-		
+
 	var service_type = xml.get_child_node(service, 'serviceType', 0).text
 	var control_url = xml.get_child_node(service, 'controlURL', 0).text
 	if control_url.to_lower().find('http://') == -1:
 		control_url = base_url + control_url
-		
+
 	return {
 		service_type = service_type,
 		control_url = control_url,
-	}	
+	}
+
+func _add_port_mapping_params(external_port, protocol, local_port, description):
+	return PoolStringArray([
+		'<NewRemoteHost></NewRemoteHost>',
+		'<NewExternalPort>%s</NewExternalPort>' % external_port,
+		'<NewProtocol>%s</NewProtocol>' % protocol,
+		'<NewInternalPort>%s</NewInternalPort>' % local_port,
+		'<NewInternalClient>%s</NewInternalClient>' % local_ip,
+		'<NewEnabled>1</NewEnabled>',
+		'<NewPortMappingDescription>%s</NewPortMappingDescription>' % description,
+		'<NewLeaseDuration>604800</NewLeaseDuration>',
+	]).join('\r\n')
+
+func _soap_action():
+	return PoolStringArray([
+		'<?xml version=\"1.0\" encoding=\"utf-8\"?>',
+	]).join('\r\n')
+
+# #define SOAP_ACTION  "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n"     \
+#                      "<s:Envelope xmlns:s="                               \
+#                      "\"http://schemas.xmlsoap.org/soap/envelope/\" "     \
+#                      "s:encodingStyle="                                   \
+#                      "\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n" \
+#                      "<s:Body>\r\n"                                       \
+#                      "<u:%s xmlns:u=\"%s\">\r\n%s"         \
+#                      "</u:%s>\r\n"                                        \
+#                      "</s:Body>\r\n"                                      \
+#                      "</s:Envelope>\r\n"
 
 func request_add_port_mapping(device):
+
+	# return Http.new(url.host, url.port, HTTPClient.METHOD_GET, url.path, [])
 	pass
 
 func add_port_mapping(port, delta):
@@ -155,7 +183,7 @@ func add_port_mapping(port, delta):
 		state = STATE.GET_DESCRIPTION
 		local_addrs = discovery.ifaddrs()
 		broadcast_for_device(DEVICE_UPNP)
-		
+
 	elif state <= STATE.DISCOVERY:
 		var response = discovery.poll()
 		match state:
@@ -163,28 +191,29 @@ func add_port_mapping(port, delta):
 				if response:
 					var url = get_describe_url(response[0])
 					if url:
-						get_description_queue.append(parse_url(url))
-						
-				if get_description_queue.size() > 0:
-					var url = get_description_queue.front()
-					if !get_description_request:
-						get_description_request = request_device_description(url)
-					var request = get_description_request.poll(delta)
+						description_queue.append(parse_url(url))
+
+				if description_queue.size() > 0:
+					var url = description_queue.front()
+					if !description_request:
+						description_request = request_device_description(url)
+					var request = description_request.poll(delta)
 					if request:
-						get_description_queue.pop_front()
-						upnp_device = parse_device_description(url, request)
+						description_request = null
+						description_queue.pop_front()
+						var upnp_device = parse_device_description(url, request)
 						if upnp_device:
 							state = STATE.ADD_PORT_MAPPING
 							add_port_mapping_request = request_add_port_mapping(upnp_device)
-			
+
 			STATE.ADD_PORT_MAPPING:
 				var request = add_port_mapping_request.poll(delta)
 				if request:
 					print(request)
-				
+
 	else:
 		match state:
 			STATE.DONE:
 				return true
-			
+
 	return false
