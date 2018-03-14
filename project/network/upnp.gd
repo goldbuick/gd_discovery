@@ -145,7 +145,7 @@ func parse_device_description(url, request):
 		control_url = control_url,
 	}
 
-func _add_port_mapping_params(external_port, protocol, local_port, description):
+func _add_port_mapping_params(external_port, protocol, local_port, local_ip, description):
 	return PoolStringArray([
 		'<NewRemoteHost></NewRemoteHost>',
 		'<NewExternalPort>%s</NewExternalPort>' % external_port,
@@ -157,31 +157,51 @@ func _add_port_mapping_params(external_port, protocol, local_port, description):
 		'<NewLeaseDuration>604800</NewLeaseDuration>',
 	]).join('\r\n')
 
-func _soap_action():
+func _soap_action(action_name, action_params, service_type):
 	return PoolStringArray([
 		'<?xml version=\"1.0\" encoding=\"utf-8\"?>',
+		'<s:Envelope',
+		'xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"',
+		's:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">',
+		'<s:Body>',
+		'<u:%s xmlns:u="%s">' % [action_name, service_type],
+		action_params,
+		'</u:%s>' % action_name,
+		'</s:Body>',
+		'</s:Envelope>',
 	]).join('\r\n')
 
-# #define SOAP_ACTION  "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n"     \
-#                      "<s:Envelope xmlns:s="                               \
-#                      "\"http://schemas.xmlsoap.org/soap/envelope/\" "     \
-#                      "s:encodingStyle="                                   \
-#                      "\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n" \
-#                      "<s:Body>\r\n"                                       \
-#                      "<u:%s xmlns:u=\"%s\">\r\n%s"         \
-#                      "</u:%s>\r\n"                                        \
-#                      "</s:Body>\r\n"                                      \
-#                      "</s:Envelope>\r\n"
+func _soap_headers(action_name, service_type, message_length):
+	return [
+		'SOAPACTION: %s#%s' % [ service_type, action_name, ],
+		'CONTENT-TYPE: text/xml ; charset="utf-8"',
+		'CONTENT-LENGTH: %s' % message_length,
+	]
+	
+func _match_ip(local_ip, control_ip):
+	var local = local_ip.split('.')[0]
+	var control = control_ip.split('.')[0]
+	return local == control
 
-func request_add_port_mapping(device):
+func request_add_port_mapping(local_port, device):
+	var action_name = 'AddPortMapping'
+	
+	var service_type = device.service_type
+	var url = parse_url(device.control_url)
+	var local_ip = null
+	for ip in discovery.ifaddrs():
+		if _match_ip(ip, url.host):
+			local_ip = ip
+	
+	var action_params = _add_port_mapping_params(local_port, 'UDP', local_port, local_ip, 'game server')
+	var body = _soap_action(action_name, action_params, service_type)
+	var headers = _soap_headers(action_name, service_type, body.length())
+	
+	return Http.new(url.host, url.port, HTTPClient.METHOD_POST, url.path, headers, body)
 
-	# return Http.new(url.host, url.port, HTTPClient.METHOD_GET, url.path, [])
-	pass
-
-func add_port_mapping(port, delta):
+func add_port_mapping(local_port, delta):
 	if state == STATE.READY:
 		state = STATE.GET_DESCRIPTION
-		local_addrs = discovery.ifaddrs()
 		broadcast_for_device(DEVICE_UPNP)
 
 	elif state <= STATE.DISCOVERY:
@@ -204,16 +224,12 @@ func add_port_mapping(port, delta):
 						var upnp_device = parse_device_description(url, request)
 						if upnp_device:
 							state = STATE.ADD_PORT_MAPPING
-							add_port_mapping_request = request_add_port_mapping(upnp_device)
+							add_port_mapping_request = request_add_port_mapping(local_port, upnp_device)
 
 			STATE.ADD_PORT_MAPPING:
 				var request = add_port_mapping_request.poll(delta)
-				if request:
-					print(request)
-
-	else:
-		match state:
-			STATE.DONE:
-				return true
+				if request and add_port_mapping_request.response_code == 200:
+					state = STATE.DONE
+					return true
 
 	return false

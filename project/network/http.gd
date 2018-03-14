@@ -10,7 +10,8 @@ enum STATE {
 }
 
 var http = null
-var read_buffer = null
+var response_code = null
+var response_buffer = null
 var state = STATE.READY
 
 var time = 0
@@ -32,6 +33,7 @@ func _init(host, port, method, path, headers, body = ''):
 func poll(delta = 0):
 	if state > STATE.READY and state < STATE.DONE:
 		http.poll()
+		response_code = http.get_response_code()
 		time += delta
 		if time > 5:
 			state = STATE.TIMEOUT
@@ -52,12 +54,12 @@ func poll(delta = 0):
 		STATE.REQUEST:
 			if http.get_status() != HTTPClient.STATUS_REQUESTING and http.has_response():
 				state = STATE.READING
-				read_buffer = PoolByteArray()
+				response_buffer = PoolByteArray()
 					
 		STATE.READING:
 			var chunk = http.read_response_body_chunk()
 			if chunk.size() > 0:
-				read_buffer += chunk
+				response_buffer += chunk
 			if http.get_status() != HTTPClient.STATUS_BODY:
 				state = STATE.BUFFER
 				
@@ -65,6 +67,6 @@ func poll(delta = 0):
 			state = STATE.DONE
 			http.close()
 			http = null
-			return read_buffer.get_string_from_ascii().strip_edges()
+			return response_buffer.get_string_from_ascii().strip_edges()
 			
 	return null	
