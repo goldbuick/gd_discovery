@@ -19,6 +19,6 @@ func poll(delta):
 	if external_port:
 		emit_signal('port_forwarding', external_port)
 		
-	var ip = whatismyip.request()
+	var ip = whatismyip.poll()
 	if ip:
 		emit_signal('external_ip', ip)

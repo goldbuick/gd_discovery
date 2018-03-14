@@ -1,17 +1,22 @@
 
+var XML = preload('res://network/xml.gd')
 var Http = preload('res://network/http.gd')
 var discovery = preload('res://network/discovery.gdns').new()
 
 enum STATE {
 	READY,
 	GET_DESCRIPTION,
+	ADD_PORT_MAPPING,
 	DISCOVERY,
 	DONE,
 }
 
 var state = STATE.READY
+var upnp_device = null
+var local_addrs = null
 var get_description_queue = []
 var get_description_request = null
+var add_port_mapping_request = null
 
 const HTTPMU_HOST_ADDRESS = '239.255.255.250'
 const HTTPMU_HOST_PORT = 1900
@@ -21,6 +26,7 @@ const DEFAULT_HTTP_PORT  = 80
 
 const HTTP_URL_PREFIX = 'http://'
 
+const DEVICE_UPNP = 'upnp:rootdevice'
 const DEVICE_TYPE_1 = 'urn:schemas-upnp-org:device:InternetGatewayDevice:1'
 const DEVICE_TYPE_2 = 'urn:schemas-upnp-org:device:WANDevice:1'
 const DEVICE_TYPE_3 = 'urn:schemas-upnp-org:device:WANConnectionDevice:1'
@@ -50,7 +56,7 @@ func get_describe_url(response):
 	if end == -1:
 		return null
 	return response.substr(begin, end-begin)
-	
+		
 func parse_url(url):
 	# http://192.168.86.1:5000/rootDesc.xml
 	var parts = url.split('//')
@@ -67,46 +73,88 @@ func parse_url(url):
 		port = port,
 		path = path
 	}
-	
-func xml_read_until_end(parser, node_name):
-	var result = parser.read()
-	if result == ERR_FILE_EOF:
-		return false
-	if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == node_name:
-		return false
-	return true
-	
-func xml_element(parser, node_name):
-	if parser.get_node_type() == XMLParser.NODE_ELEMENT and parser.get_node_name() == node_name:
-		return true
-	return false
+
+func request_device_description(url):
+	return Http.new(url.host, url.port, HTTPClient.METHOD_GET, url.path, [])
 	
 func parse_device_description(url, request):
-	var base_url = 'http://' + url.host + ':' + str(url.port)
-	
-	var parser = XMLParser.new()
-	parser.open_buffer(request.to_ascii())
-	while parser.read() != ERR_FILE_EOF:
-		if parser.get_node_type() == XMLParser.NODE_ELEMENT:
-			match parser.get_node_name():
-				'URLBase':
-					parser.read()
-					print(parser.get_node_data())
-					
-				'device':
-					while xml_read_until_end(parser, 'device'):
-						if xml_element(parser, 'deviceType'):
-							parser.read()
-							var deviceType = parser.get_node_data()
+	var xml = XML.new(request)
 
+	# figure out base url
+	var base_url = 'http://' + url.host + ':' + str(url.port)
+	var base_url_node = xml.get_child_node(xml.root, 'URLBase', 0)
+	if base_url_node and base_url_node.text:
+		base_url = base_url_node.text
+
+	var internet_gateway_device = null
+	for node in xml.get_child_nodes(xml.root, 'device'):
+		var device_type = xml.get_child_node(node, 'deviceType', 0)
+		if device_type.text == DEVICE_TYPE_1:
+			internet_gateway_device = node
+	# failed to find internet_gateway_device
+	if !internet_gateway_device:
+		return null
+		
+	# get device list of internet_gateway_device
+	var device_list = xml.get_child_node(internet_gateway_device, 'deviceList', 0)
+	if !device_list: 
+		return null
+		
+	var wan_device = null
+	for node in xml.get_child_nodes(device_list, 'device'):
+		var device_type = xml.get_child_node(node, 'deviceType', 0)
+		if device_type.text == DEVICE_TYPE_2:
+			wan_device = node
+	# failed to find wan_device
+	if !wan_device:
+		return null
+		
+	# get device list of wan_device
+	device_list = xml.get_child_node(wan_device, 'deviceList', 0)
+	if !device_list: 
+		return null
+		
+	var wan_connection_device = null
+	for node in xml.get_child_nodes(device_list, 'device'):
+		var device_type = xml.get_child_node(node, 'deviceType', 0)
+		if device_type.text == DEVICE_TYPE_3:
+			wan_connection_device = node
+	# failed to find wan_connection_device
+	if !wan_connection_device:
+		return null
+				
+	# get service list of wan_connection_device
+	var service_list = xml.get_child_node(wan_connection_device, 'serviceList', 0)
+	if !service_list: 
+		return null
+				
+	var service = null
+	for node in xml.get_child_nodes(service_list, 'service'):
+		var service_type = xml.get_child_node(node, 'serviceType', 0)
+		if service_type.text == SERVICE_WANIP or service_type.text == SERVICE_WANPPP:
+			service = node
+	# failed to find service
+	if !service:
+		return null
+		
+	var service_type = xml.get_child_node(service, 'serviceType', 0).text
+	var control_url = xml.get_child_node(service, 'controlURL', 0).text
+	if control_url.to_lower().find('http://') == -1:
+		control_url = base_url + control_url
+		
+	return {
+		service_type = service_type,
+		control_url = control_url,
+	}	
+
+func request_add_port_mapping(device):
+	pass
 
 func add_port_mapping(port, delta):
 	if state == STATE.READY:
 		state = STATE.GET_DESCRIPTION
-		broadcast_for_device('upnp:rootdevice')
-		broadcast_for_device(DEVICE_TYPE_1)
-		broadcast_for_device(DEVICE_TYPE_2)
-		broadcast_for_device(DEVICE_TYPE_3)
+		local_addrs = discovery.ifaddrs()
+		broadcast_for_device(DEVICE_UPNP)
 		
 	elif state <= STATE.DISCOVERY:
 		var response = discovery.poll()
@@ -118,13 +166,22 @@ func add_port_mapping(port, delta):
 						get_description_queue.append(parse_url(url))
 						
 				if get_description_queue.size() > 0:
-					var url = get_description_queue[0]
+					var url = get_description_queue.front()
 					if !get_description_request:
-						get_description_request = Http.new()
-					var request = get_description_request.request(url.host, url.port, HTTPClient.METHOD_GET, url.path, [], delta)
+						get_description_request = request_device_description(url)
+					var request = get_description_request.poll(delta)
 					if request:
-						var device = parse_device_description(url, request)
-		
+						get_description_queue.pop_front()
+						upnp_device = parse_device_description(url, request)
+						if upnp_device:
+							state = STATE.ADD_PORT_MAPPING
+							add_port_mapping_request = request_add_port_mapping(upnp_device)
+			
+			STATE.ADD_PORT_MAPPING:
+				var request = add_port_mapping_request.poll(delta)
+				if request:
+					print(request)
+				
 	else:
 		match state:
 			STATE.DONE:

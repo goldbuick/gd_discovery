@@ -10,21 +10,35 @@ enum STATE {
 }
 
 var http = null
-var request_time = 0
 var read_buffer = null
 var state = STATE.READY
 
-func request(host, port, method, path, headers, delta):
+var time = 0
+var host
+var port
+var method
+var path
+var headers
+var body
+
+func _init(host, port, method, path, headers, body = ''):
+	self.host = host
+	self.port = port
+	self.method = method
+	self.path = path
+	self.headers = headers
+	self.body = body
+	
+func poll(delta = 0):
 	if state > STATE.READY and state < STATE.DONE:
 		http.poll()
-		request_time += delta
-		if request_time > 5:
+		time += delta
+		if time > 5:
 			state = STATE.TIMEOUT
 
 	match state:
 		STATE.READY:
 			http = HTTPClient.new()
-			request_time = 0
 			state = STATE.CONNECT
 			var err = http.connect_to_host(host, port)
 			assert(err == OK)
@@ -32,7 +46,7 @@ func request(host, port, method, path, headers, delta):
 		STATE.CONNECT:
 			if http.get_status() == HTTPClient.STATUS_CONNECTED:
 				state = STATE.REQUEST
-				var err = http.request(method, path, headers)
+				var err = http.request(method, path, headers, body)
 				assert(err == OK)
 
 		STATE.REQUEST:
@@ -53,4 +67,4 @@ func request(host, port, method, path, headers, delta):
 			http = null
 			return read_buffer.get_string_from_ascii().strip_edges()
 			
-	return null
+	return null	
