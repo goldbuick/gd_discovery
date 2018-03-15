@@ -12,6 +12,7 @@ enum STATE {
 }
 
 var state = STATE.READY
+var external_port = 0
 var description_queue = []
 var description_request = null
 var add_port_mapping_request = null
@@ -20,7 +21,7 @@ const HTTPMU_HOST_ADDRESS = '239.255.255.250'
 const HTTPMU_HOST_PORT = 1900
 
 const HTTP_OK = '200 OK'
-const DEFAULT_HTTP_PORT  = 80
+const HTTP_PORT = 80
 
 const HTTP_URL_PREFIX = 'http://'
 
@@ -63,7 +64,7 @@ func parse_url(url):
 	var host_port = parts.pop_front()
 	host_port = host_port.split(':')
 	var host = host_port[0]
-	var port = int(host_port[1]) if host_port.size() > 1 else 80
+	var port = int(host_port[1]) if host_port.size() > 1 else HTTP_PORT
 	# /path
 	var path = '/' + PoolStringArray(parts).join('/')
 	return {
@@ -154,7 +155,7 @@ func _add_port_mapping_params(external_port, protocol, local_port, local_ip, des
 		'<NewInternalClient>%s</NewInternalClient>' % local_ip,
 		'<NewEnabled>1</NewEnabled>',
 		'<NewPortMappingDescription>%s</NewPortMappingDescription>' % description,
-		'<NewLeaseDuration>604800</NewLeaseDuration>',
+		'<NewLeaseDuration>604800</NewLeaseDuration>', # 1 week lease time
 	]).join('\r\n')
 
 func _soap_action(action_name, action_params, service_type):
@@ -177,7 +178,7 @@ func _soap_headers(action_name, service_type, message_length):
 		'CONTENT-TYPE: text/xml ; charset="utf-8"',
 		'CONTENT-LENGTH: %s' % message_length,
 	]
-	
+
 func _match_ip(local_ip, control_ip):
 	var local = local_ip.split('.')[0]
 	var control = control_ip.split('.')[0]
@@ -185,18 +186,19 @@ func _match_ip(local_ip, control_ip):
 
 func request_add_port_mapping(local_port, device):
 	var action_name = 'AddPortMapping'
-	
+
 	var service_type = device.service_type
 	var url = parse_url(device.control_url)
 	var local_ip = null
 	for ip in discovery.ifaddrs():
 		if _match_ip(ip, url.host):
 			local_ip = ip
-	
-	var action_params = _add_port_mapping_params(local_port, 'UDP', local_port, local_ip, 'game server')
+
+	external_port = 27015 + randi() % 2000
+	var action_params = _add_port_mapping_params(external_port, 'UDP', local_port, local_ip, 'game server')
 	var body = _soap_action(action_name, action_params, service_type)
 	var headers = _soap_headers(action_name, service_type, body.length())
-	
+
 	return Http.new(url.host, url.port, HTTPClient.METHOD_POST, url.path, headers, body)
 
 func add_port_mapping(local_port, delta):
@@ -230,6 +232,6 @@ func add_port_mapping(local_port, delta):
 				var request = add_port_mapping_request.poll(delta)
 				if request and add_port_mapping_request.response_code == 200:
 					state = STATE.DONE
-					return true
+					return external_port
 
-	return false
+	return null

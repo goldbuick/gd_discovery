@@ -6,7 +6,7 @@ var whatismyip = preload('res://network/whatismyip.gd').new()
 var discovery = preload('res://network/discovery.gdns').new()
 
 signal external_ip(ip)
-signal port_forwarding(external_port)
+signal external_port(port)
 
 func start(port, handshake):
 	server_port = port
@@ -15,10 +15,10 @@ func start(port, handshake):
 func poll(delta):
 	discovery.poll()
 
-	var external_port = upnp.add_port_mapping(server_port, delta)
-	if external_port:
-		emit_signal('port_forwarding', external_port)
-		
+	var port = upnp.add_port_mapping(server_port, delta)
+	if port:
+		emit_signal('external_port', port)
+
 	var ip = whatismyip.poll()
 	if ip:
 		emit_signal('external_ip', ip)

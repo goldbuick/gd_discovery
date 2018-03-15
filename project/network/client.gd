@@ -8,9 +8,8 @@ signal found_server(ip)
 func start(handshake):
 	client_handshake = handshake
 	return discovery.broadcast('255.255.255.255', discovery_port, handshake)
-	
+
 func poll():
 	var pong = discovery.poll()
-	if pong and pong.size() == 2 and pong[0] == client_handshake:
+	if pong and pong[0] == client_handshake:
 		emit_signal('found_server', pong[1])
-	
