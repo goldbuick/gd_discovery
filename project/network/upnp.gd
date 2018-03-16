@@ -2,6 +2,7 @@
 var XML = preload('res://network/xml.gd')
 var Http = preload('res://network/http.gd')
 var discovery = preload('res://network/discovery.gdns').new()
+var UpnpUtil = preload('res://network/upnp_util.gd')
 
 enum STATE {
 	READY,
@@ -33,15 +34,8 @@ const DEVICE_TYPE_3 = 'urn:schemas-upnp-org:device:WANConnectionDevice:1'
 const SERVICE_WANIP = 'urn:schemas-upnp-org:service:WANIPConnection:1'
 const SERVICE_WANPPP = 'urn:schemas-upnp-org:service:WANPPPConnection:1'
 
-func broadcast_for_device(device):
-	var SEARCH_REQUEST_STRING = PoolStringArray([
-		'M-SEARCH * HTTP/1.1',
-		'HOST: 239.255.255.250:1900',
-		'ST: ' + device,
-		'MAN: "ssdp:discover"',
-		'MX: 3',
-		'',
-	]).join('\r\n')
+func broadcast_for_device(device_type):
+	var SEARCH_REQUEST_STRING = UpnpUtil.search_request(device_type)
 	discovery.broadcast(HTTPMU_HOST_ADDRESS, HTTPMU_HOST_PORT, SEARCH_REQUEST_STRING)
 
 func get_describe_url(response):
@@ -55,23 +49,6 @@ func get_describe_url(response):
 	if end == -1:
 		return null
 	return response.substr(begin, end-begin)
-
-func parse_url(url):
-	# http://192.168.86.1:5000/rootDesc.xml
-	var parts = url.split('//')
-	parts = Array(parts[1].split('/'))
-	# host:port
-	var host_port = parts.pop_front()
-	host_port = host_port.split(':')
-	var host = host_port[0]
-	var port = int(host_port[1]) if host_port.size() > 1 else HTTP_PORT
-	# /path
-	var path = '/' + PoolStringArray(parts).join('/')
-	return {
-		host = host,
-		port = port,
-		path = path
-	}
 
 func request_device_description(url):
 	return Http.new(url.host, url.port, HTTPClient.METHOD_GET, url.path, [])
@@ -146,39 +123,6 @@ func parse_device_description(url, request):
 		control_url = control_url,
 	}
 
-func _add_port_mapping_params(external_port, protocol, local_port, local_ip, description):
-	return PoolStringArray([
-		'<NewRemoteHost></NewRemoteHost>',
-		'<NewExternalPort>%s</NewExternalPort>' % external_port,
-		'<NewProtocol>%s</NewProtocol>' % protocol,
-		'<NewInternalPort>%s</NewInternalPort>' % local_port,
-		'<NewInternalClient>%s</NewInternalClient>' % local_ip,
-		'<NewEnabled>1</NewEnabled>',
-		'<NewPortMappingDescription>%s</NewPortMappingDescription>' % description,
-		'<NewLeaseDuration>604800</NewLeaseDuration>', # 1 week lease time
-	]).join('\r\n')
-
-func _soap_action(action_name, action_params, service_type):
-	return PoolStringArray([
-		'<?xml version=\"1.0\" encoding=\"utf-8\"?>',
-		'<s:Envelope',
-		'xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"',
-		's:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">',
-		'<s:Body>',
-		'<u:%s xmlns:u="%s">' % [action_name, service_type],
-		action_params,
-		'</u:%s>' % action_name,
-		'</s:Body>',
-		'</s:Envelope>',
-	]).join('\r\n')
-
-func _soap_headers(action_name, service_type, message_length):
-	return [
-		'SOAPACTION: %s#%s' % [ service_type, action_name, ],
-		'CONTENT-TYPE: text/xml ; charset="utf-8"',
-		'CONTENT-LENGTH: %s' % message_length,
-	]
-
 func _match_ip(local_ip, control_ip):
 	var local = local_ip.split('.')[0]
 	var control = control_ip.split('.')[0]
@@ -188,16 +132,16 @@ func request_add_port_mapping(local_port, device):
 	var action_name = 'AddPortMapping'
 
 	var service_type = device.service_type
-	var url = parse_url(device.control_url)
+	var url = UpnpUtil.parse_url(device.control_url)
 	var local_ip = null
 	for ip in discovery.ifaddrs():
 		if _match_ip(ip, url.host):
 			local_ip = ip
 
 	external_port = 27015 + randi() % 2000
-	var action_params = _add_port_mapping_params(external_port, 'UDP', local_port, local_ip, 'game server')
-	var body = _soap_action(action_name, action_params, service_type)
-	var headers = _soap_headers(action_name, service_type, body.length())
+	var action_params = UpnpUtil.add_port_mapping_params(external_port, 'UDP', local_port, local_ip, 'game server')
+	var body = UpnpUtil.soap_action(action_name, action_params, service_type)
+	var headers = UpnpUtil.soap_headers(action_name, service_type, body.length())
 
 	return Http.new(url.host, url.port, HTTPClient.METHOD_POST, url.path, headers, body)
 
@@ -213,7 +157,7 @@ func add_port_mapping(local_port, delta):
 				if response:
 					var url = get_describe_url(response[0])
 					if url:
-						description_queue.append(parse_url(url))
+						description_queue.append(UpnpUtil.parse_url(url))
 
 				if description_queue.size() > 0:
 					var url = description_queue.front()
