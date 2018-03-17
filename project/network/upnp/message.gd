@@ -1,21 +1,4 @@
 
-static func parse_url(url):
-	# http://192.168.86.1:5000/rootDesc.xml
-	var parts = url.split('//')
-	parts = Array(parts[1].split('/'))
-	# host:port
-	var host_port = parts.pop_front()
-	host_port = host_port.split(':')
-	var host = host_port[0]
-	var port = int(host_port[1]) if host_port.size() > 1 else HTTP_PORT
-	# /path
-	var path = '/' + PoolStringArray(parts).join('/')
-	return {
-		host = host,
-		port = port,
-		path = path
-	}
-
 static func search_request(device_type):
   return PoolStringArray([
 		'M-SEARCH * HTTP/1.1',
@@ -58,3 +41,4 @@ static func soap_headers(action_name, service_type, message_length):
 		'CONTENT-TYPE: text/xml ; charset="utf-8"',
 		'CONTENT-LENGTH: %s' % message_length,
 	]
+
