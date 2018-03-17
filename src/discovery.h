@@ -13,9 +13,18 @@ typedef SSIZE_T ssize_t;
 
 #else
 
+#include <netdb.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
 #endif
 
 void discovery_socket_init();
 void discovery_socket_close(int socket);
 int discovery_socket_set_non_blocking(int socket);
-godot_variant discovery_ifaddrs(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
+godot_variant discovery_socket_ifaddrs(const godot_gdnative_core_api_struct *api);
+

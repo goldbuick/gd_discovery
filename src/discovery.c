@@ -2,15 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// #include <netdb.h>
-// #include <fcntl.h>
-// #include <unistd.h>
-// #include <ifaddrs.h>
-// #include <arpa/inet.h>
-// #include <sys/types.h>
-// #include <sys/socket.h>
-// #include <netinet/in.h>
-
 #include "discovery.h"
 
 #define LIB_NAME "DISCOVERY"
@@ -32,6 +23,7 @@ bool discovery_init(user_data_struct* user_data, int port, int broadcast, bool k
 godot_variant discovery_server(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
 godot_variant discovery_broadcast(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
 godot_variant discovery_poll(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
+godot_variant discovery_ifaddrs(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
 
 void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
   // setup sockets
@@ -371,4 +363,8 @@ godot_variant discovery_poll(godot_object *p_instance, void *p_method_data, void
   api->godot_variant_destroy(&source);
   api->godot_array_destroy(&ping);
   return ret;
+}
+
+godot_variant discovery_ifaddrs(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args) {
+  return discovery_socket_ifaddrs(api);
 }

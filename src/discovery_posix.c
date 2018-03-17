@@ -1,8 +1,21 @@
 #include "discovery.h"
+#include <ifaddrs.h>
 
-godot_variant discovery_ifaddrs(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args) {
+void discovery_socket_init() {
+  // no-op
+}
+
+void discovery_socket_close(int socket) {
+  close(socket);
+}
+
+int discovery_socket_set_non_blocking(int socket) {
+  int mode = 1;
+  return ioctl(socket, FIONBIO, &mode);
+}
+
+godot_variant discovery_socket_ifaddrs(const godot_gdnative_core_api_struct *api) {
   godot_variant ret;
-  user_data_struct *user_data = (user_data_struct *)p_user_data;
 
   struct sockaddr_in *sa;
   struct ifaddrs *ifap, *ifa;
