@@ -1,16 +1,17 @@
-#include <gdnative_api_struct.gen.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <netdb.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <ifaddrs.h>
-#include <arpa/inet.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
+// #include <netdb.h>
+// #include <fcntl.h>
+// #include <unistd.h>
+// #include <ifaddrs.h>
+// #include <arpa/inet.h>
+// #include <sys/types.h>
+// #include <sys/socket.h>
+// #include <netinet/in.h>
+
+#include "discovery.h"
 
 #define LIB_NAME "DISCOVERY"
 #define MAX_BUFF_SIZE 102400
@@ -31,9 +32,11 @@ bool discovery_init(user_data_struct* user_data, int port, int broadcast, bool k
 godot_variant discovery_server(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
 godot_variant discovery_broadcast(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
 godot_variant discovery_poll(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
-godot_variant discovery_ifaddrs(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args);
 
 void GDN_EXPORT godot_gdnative_init(godot_gdnative_init_options *p_options) {
+  // setup sockets
+  discovery_socket_init();
+
   api = p_options->api_struct;
 
   // now find our extensions
@@ -143,7 +146,7 @@ GDCALLINGCONV void *discovery_constructor(godot_object *p_instance, void *p_meth
 GDCALLINGCONV void discovery_destructor(godot_object *p_instance, void *p_method_data, void *p_user_data) {
   user_data_struct *user_data = (user_data_struct *)p_user_data;
   if (user_data && user_data->dsocket >= 0) {
-    close(user_data->dsocket);
+    discovery_socket_close(user_data->dsocket);
   }
   api->godot_free(p_user_data);
 }
@@ -151,8 +154,14 @@ GDCALLINGCONV void discovery_destructor(godot_object *p_instance, void *p_method
 bool discovery_init(user_data_struct* user_data, int port, int broadcast, bool keep) {
   // clear existing data
   memset(user_data->message, 0, sizeof(user_data->message));
-  if (user_data->dsocket >= 0 && keep == false) {
-    close(user_data->dsocket);
+
+  // close existing port
+  if (user_data->dsocket >= 0) {
+    if (keep == true) {
+      return true;
+    } else {
+      discovery_socket_close(user_data->dsocket);
+    }
   }
 
   // create socket
@@ -162,7 +171,7 @@ bool discovery_init(user_data_struct* user_data, int port, int broadcast, bool k
   }
 
   // set broadcast
-  if (broadcast && setsockopt(user_data->dsocket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) == -1) {
+  if (broadcast && setsockopt(user_data->dsocket, SOL_SOCKET, SO_BROADCAST, (const char *)&broadcast, sizeof(broadcast)) == -1) {
     user_data->dsocket = -1;
     return false;
   }
@@ -178,12 +187,18 @@ bool discovery_init(user_data_struct* user_data, int port, int broadcast, bool k
   }
 
   // set non-blocking
-  int opts = fcntl(user_data->dsocket, F_GETFL);
-  if (fcntl(user_data->dsocket, F_SETFL, opts | O_NONBLOCK) == -1) {
-    close(user_data->dsocket);
+  if (discovery_socket_set_non_blocking(user_data->dsocket) == -1) {
+    discovery_socket_close(user_data->dsocket);
     user_data->dsocket = -1;
     return false;
   }
+
+  // int opts = fcntl(user_data->dsocket, F_GETFL);
+  // if (fcntl(user_data->dsocket, F_SETFL, opts | O_NONBLOCK) == -1) {
+  //   discovery_socket_close(user_data->dsocket);
+  //   user_data->dsocket = -1;
+  //   return false;
+  // }
 
   return true;
 }
@@ -357,44 +372,3 @@ godot_variant discovery_poll(godot_object *p_instance, void *p_method_data, void
   api->godot_array_destroy(&ping);
   return ret;
 }
-
-godot_variant discovery_ifaddrs(godot_object *p_instance, void *p_method_data, void *p_user_data, int p_num_args, godot_variant **p_args) {
-  godot_variant ret;
-  user_data_struct *user_data = (user_data_struct *)p_user_data;
-
-  struct sockaddr_in *sa;
-  struct ifaddrs *ifap, *ifa;
-
-  godot_array addrs;
-  api->godot_array_new(&addrs);
-
-  getifaddrs(&ifap);
-  for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
-    if (ifa->ifa_addr->sa_family == AF_INET) {
-      sa = (struct sockaddr_in *)ifa->ifa_addr;
-
-      // get address
-      godot_string addr_string;
-      api->godot_string_new(&addr_string);
-      api->godot_string_parse_utf8(&addr_string, inet_ntoa(sa->sin_addr));
-
-      // add to array
-      godot_variant addr;
-      api->godot_variant_new_string(&addr, &addr_string);
-      api->godot_array_append(&addrs, &addr);
-
-      // cleanup
-      api->godot_string_destroy(&addr_string);
-      api->godot_variant_destroy(&addr);
-    }
-  }
-  freeifaddrs(ifap);
-
-  // set return value
-  api->godot_variant_new_array(&ret, &addrs);
-
-  // cleanup
-  api->godot_array_destroy(&addrs);
-  return ret;
-}
-
